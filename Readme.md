@@ -15,7 +15,6 @@ NPM installed
 ### Installation
 Clone the Repository
 git clone https://github.com/Etette/ekolance_stellar_liquidity.git
-cd STELLAR
 
 ### Install Dependencies
 npm install @stellar/stellar-sdk
