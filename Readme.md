@@ -54,3 +54,5 @@ View transaction at: https://stellar.expert/explorer/testnet/tx/d8ebed53810e657f
 LP-withdrawal Completed
  Hash: 0804bc3cdfffba66238ec9dc911e312991b936fe555b133b35e7a2298f4dabac
 View transaction at: https://stellar.expert/explorer/testnet/tx/0804bc3cdfffba66238ec9dc911e312991b936fe555b133b35e7a2298f4dabac
+
+Social media post - https://x.com/Eka_authorie/status/1828918931995729963
