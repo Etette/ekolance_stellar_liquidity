@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Stellar Smart Contract Frontend</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+        }
+        button {
+            margin: 10px 0;
+        }
+        pre {
+            background: #f4f4f4;
+            padding: 10px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Stellar Smart Contract Interaction</h1>
+    <div>
+        <h2>Generate Wallet</h2>
+        <button onclick="generateWallet()">Generate Wallet</button>
+        <pre id="walletDetails"></pre>
+    </div>
+
+    <div>
+        <h2>Fund Wallet</h2>
+        <input type="text" id="fundPublicKey" placeholder="Enter Public Key">
+        <button onclick="fundWallet()">Fund Wallet</button>
+        <pre id="fundDetails"></pre>
+    </div>
+
+    <div>
+        <h2>Create Assets</h2>
+        <button onclick="createAssets()">Create Assets</button>
+        <pre id="assetDetails"></pre>
+    </div>
+
+    <div>
+        <h2>Create Liquidity Pool</h2>
+        <button onclick="createLiquidityPool()">Create Liquidity Pool</button>
+        <pre id="lpDetails"></pre>
+    </div>
+
+    <div>
+        <h2>Deposit to Liquidity Pool</h2>
+        <button onclick="depositToLiquidityPool()">Deposit to Pool</button>
+        <pre id="depositDetails"></pre>
+    </div>
+
+    <div>
+        <h2>Execute Path Payment</h2>
+        <button onclick="executePathPayment()">Execute Path Payment</button>
+        <pre id="pathPaymentDetails"></pre>
+    </div>
+
+    <div>
+        <h2>Withdraw from Liquidity Pool</h2>
+        <button onclick="withdrawFromLiquidityPool()">Withdraw from Pool</button>
+        <pre id="withdrawDetails"></pre>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/stellar-sdk/12.2.0/stellar-sdk.js"></script>
+    <script>
+        const server = new StellarSdk.Server('https://soroban-testnet.stellar.org');
+        const network = StellarSdk.Networks.TESTNET;
+        const fee = StellarSdk.BASE_FEE;
+
+        let walletPair, asset1, asset2, lpAsset, liquidityPoolID;
+
+        function generateWallet() {
+            walletPair = StellarSdk.Keypair.random();
+            document.getElementById('walletDetails').innerText = `Public Key: ${walletPair.publicKey()}\nSecret Key: ${walletPair.secret()}`;
+        }
+
+        async function fundWallet() {
+            const publicKey = document.getElementById('fundPublicKey').value || walletPair.publicKey();
+            try {
+                const response = await fetch(`https://friendbot.stellar.org?addr=${publicKey}`);
+                const result = await response.json();
+                document.getElementById('fundDetails').innerText = `Wallet funded: ${result.hash}`;
+            } catch (error) {
+                document.getElementById('fundDetails').innerText = `Error funding wallet: ${error}`;
+            }
+        }
+
+        function createAssets() {
+            asset1 = new StellarSdk.Asset('MXLM', walletPair.publicKey());
+            asset2 = new StellarSdk.Asset('USDC', walletPair.publicKey());
+            document.getElementById('assetDetails').innerText = `Assets created: ${asset1.code} and ${asset2.code}`;
+        }
+
+        function createLiquidityPool() {
+            lpAsset = new StellarSdk.LiquidityPoolAsset(asset1, asset2, 30);
+            liquidityPoolID = StellarSdk.getLiquidityPoolId("constant_product", lpAsset);
+            document.getElementById('lpDetails').innerText = `Liquidity Pool ID: ${liquidityPoolID}`;
+        }
+
+        async function depositToLiquidityPool() {
+            const account = await server.loadAccount(walletPair.publicKey());
+            const depositToPool = new StellarSdk.TransactionBuilder(account, {
+                fee: fee,
+                networkPassphrase: network
+            })
+            .addOperation(StellarSdk.Operation.changeTrust({ asset: lpAsset, limit: '1000' }))
+            .addOperation(StellarSdk.Operation.liquidityPoolDeposit({
+                liquidityPoolId: liquidityPoolID,
+                maxAmountA: '5000',
+                maxAmountB: '5000',
+                minPrice: { n: 1, d: 1 },
+                maxPrice: { n: 1, d: 1 }
+            }))
+            .setTimeout(30)
+            .build();
+
+            depositToPool.sign(walletPair);
+
+            try {
+                const res = await server.submitTransaction(depositToPool);
+                document.getElementById('depositDetails').innerText = `Deposit to Pool Completed: ${res.hash}`;
+            } catch (error) {
+                document.getElementById('depositDetails').innerText = `Error depositing to pool: ${error}`;
+            }
+        }
+
+        async function executePathPayment() {
+            const userAccount = await server.loadAccount(walletPair.publicKey());
+            const pathPayment = new StellarSdk.TransactionBuilder(userAccount, {
+                fee: fee,
+                networkPassphrase: network
+            })
+            .addOperation(StellarSdk.Operation.changeTrust({ asset: asset1, source: walletPair.publicKey() }))
+            .addOperation(StellarSdk.Operation.changeTrust({ asset: asset2, source: walletPair.publicKey() }))
+            .addOperation(StellarSdk.Operation.pathPaymentStrictReceive({
+                sendAsset: asset2,
+                sendMax: '1000',
+                destination: walletPair.publicKey(),
+                destAsset: asset2,
+                destAmount: '200',
+                source: walletPair.publicKey()
+            }))
+            .setTimeout(30)
+            .build();
+
+            pathPayment.sign(walletPair);
+
+            try {
+                const res = await server.submitTransaction(pathPayment);
+                document.getElementById('pathPaymentDetails').innerText = `Path Payment Completed: ${res.hash}`;
+            } catch (error) {
+                document.getElementById('pathPaymentDetails').innerText = `Error executing path payment: ${error}`;
+            }
+        }
+
+        async function withdrawFromLiquidityPool() {
+            const account = await server.loadAccount(walletPair.publicKey());
+            const lpWithdraw = new StellarSdk.TransactionBuilder(account, {
+                fee: fee,
+                networkPassphrase: network
+            })
+            .addOperation(StellarSdk.Operation.liquidityPoolWithdraw({
+                liquidityPoolId: liquidityPoolID,
+                amount: '150',
+                minAmountA: '0',
+                minAmountB: '0'
+            }))
+            .setTimeout(30)
+            .build();
+
+            lpWithdraw.sign(walletPair);
+
+            try {
+                const res = await server.submitTransaction(lpWithdraw);
+                document.getElementById('withdrawDetails').innerText = `Liquidity Pool Withdrawal Completed: ${res.hash}`;
+            } catch (error) {
+                document.getElementById('withdrawDetails').innerText = `Error withdrawing from pool: ${error}`;
+            }
+        }
+    </script>
+</body>
+</html>
